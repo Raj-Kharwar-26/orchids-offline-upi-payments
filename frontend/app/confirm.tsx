@@ -128,11 +128,11 @@ export default function ConfirmScreen() {
             <HashIcon size={20} color="#ffffff" />
             <Text className="text-base font-bold text-primary-foreground">Dial *99#</Text>
           </TouchableOpacity>
-          {Platform.OS === 'web' && (
-            <Text className="mt-2 text-center text-xs text-muted-foreground">
-              Open your phone dialer and dial *99#
-            </Text>
-          )}
+        {Platform.OS === 'web' && (
+          <Text className="mt-2 text-center text-xs text-muted-foreground">
+            Dial *99# on your phone - works without internet
+          </Text>
+        )}
         </View>
       )}
 
@@ -162,7 +162,7 @@ export default function ConfirmScreen() {
           </Text>
           {Platform.OS === 'web' && (
             <Text className="mt-1 text-center text-xs text-muted-foreground">
-              Open your phone dialer and call the number for your bank
+              Call from your phone - works without internet
             </Text>
           )}
         </View>

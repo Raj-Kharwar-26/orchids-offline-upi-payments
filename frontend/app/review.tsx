@@ -1,11 +1,10 @@
 import { usePaymentStore } from '@/lib/payment-store';
-import { formatCurrency } from '@/lib/upi';
-import { apiRequest } from '@/lib/api';
+import { formatCurrency, generateUssdSteps, generateIvrSteps, generateLocalTxnId } from '@/lib/upi';
 import { useRouter } from 'expo-router';
 import { ArrowLeftIcon, UserIcon, HashIcon, IndianRupeeIcon, FileTextIcon } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ReviewScreen() {
@@ -16,7 +15,6 @@ export default function ReviewScreen() {
   const iconColor = isDark ? '#e2e8f0' : '#1e293b';
   const mutedColor = isDark ? '#94a3b8' : '#64748b';
   const { qrData, amount, setTransactionResult } = usePaymentStore();
-  const [loading, setLoading] = useState(false);
   const [selectedMode, setSelectedMode] = useState<'ussd' | 'ivr'>('ussd');
 
   if (!qrData || !amount) {
@@ -30,40 +28,14 @@ export default function ReviewScreen() {
     );
   }
 
-  const handleConfirm = async () => {
-    setLoading(true);
-    try {
-      const createRes = await apiRequest<{ transaction: { id: string } }>('/api/transactions', {
-        method: 'POST',
-        body: JSON.stringify({
-          payeeVpa: qrData.payeeVpa,
-          payeeName: qrData.payeeName,
-          amount,
-        }),
-      });
+  const handleConfirm = () => {
+    const txnId = generateLocalTxnId();
+    const steps = selectedMode === 'ussd'
+      ? generateUssdSteps(qrData.payeeVpa, amount)
+      : generateIvrSteps(qrData.payeeVpa, amount);
 
-      const confirmRes = await apiRequest<{
-        transaction: { id: string };
-        instruction: { type: string; message: string };
-      }>(`/api/transactions/${createRes.transaction.id}/confirm`, {
-        method: 'POST',
-        body: JSON.stringify({ mode: selectedMode }),
-      });
-
-      setTransactionResult(
-        confirmRes.transaction.id,
-        selectedMode,
-        confirmRes.instruction.message
-      );
-
-      router.replace('/confirm');
-    } catch {
-      if (Platform.OS === 'web') {
-        window.alert('Failed to create transaction. Please try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
+    setTransactionResult(txnId, selectedMode, steps.join('\n'));
+    router.replace('/confirm');
   };
 
   return (
@@ -143,20 +115,15 @@ export default function ReviewScreen() {
       </View>
 
       <View className="mt-8 px-5">
-        <TouchableOpacity
-          onPress={handleConfirm}
-          disabled={loading}
-          className="items-center rounded-2xl bg-primary py-4"
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
+          <TouchableOpacity
+            onPress={handleConfirm}
+            className="items-center rounded-2xl bg-primary py-4"
+            activeOpacity={0.8}
+          >
             <Text className="text-base font-bold text-primary-foreground">
               Confirm & Get Instructions
             </Text>
-          )}
-        </TouchableOpacity>
+          </TouchableOpacity>
       </View>
 
       <View className="mt-4 px-5">
