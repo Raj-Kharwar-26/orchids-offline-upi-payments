@@ -1,5 +1,6 @@
 import { setQrData } from '@/lib/payment-store';
-import { parseUpiQr } from '@/lib/upi';
+import { parseUpiQr, formatCurrency } from '@/lib/upi';
+import type { UpiQrData } from '@/lib/upi';
 import {
   CameraView,
   useCameraPermissions,
@@ -13,6 +14,8 @@ import {
   FlashlightIcon,
   FlashlightOffIcon,
   ImageIcon,
+  CheckCircleIcon,
+  ArrowRightIcon,
 } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 import { useCallback, useState, useRef } from 'react';
@@ -27,6 +30,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -60,7 +64,9 @@ export default function ScanScreen() {
   const [showManual, setShowManual] = useState(false);
   const [qrInput, setQrInput] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [merchantPreview, setMerchantPreview] = useState<UpiQrData | null>(null);
   const scanLineAnim = useRef(new Animated.Value(0)).current;
+  const sheetAnim = useRef(new Animated.Value(300)).current;
 
   const startScanAnimation = useCallback(() => {
     Animated.loop(
@@ -79,6 +85,37 @@ export default function ScanScreen() {
     ).start();
   }, [scanLineAnim]);
 
+  const showMerchantSheet = useCallback((parsed: UpiQrData) => {
+    setMerchantPreview(parsed);
+    Animated.spring(sheetAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11,
+    }).start();
+  }, [sheetAnim]);
+
+  const dismissMerchantSheet = useCallback(() => {
+    Animated.timing(sheetAnim, {
+      toValue: 300,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      setMerchantPreview(null);
+      setScanned(false);
+    });
+  }, [sheetAnim]);
+
+  const proceedWithMerchant = useCallback(() => {
+    if (!merchantPreview) return;
+    setQrData(merchantPreview);
+    if (merchantPreview.amount) {
+      router.replace('/review');
+    } else {
+      router.replace('/amount');
+    }
+  }, [merchantPreview, router]);
+
   const handleParsed = useCallback(
     (input: string) => {
       const data = input.trim();
@@ -94,14 +131,9 @@ export default function ScanScreen() {
         return;
       }
 
-      setQrData(parsed);
-      if (parsed.amount) {
-        router.replace('/review');
-      } else {
-        router.replace('/amount');
-      }
+      showMerchantSheet(parsed);
     },
-    [router],
+    [showMerchantSheet],
   );
 
   const handleBarcodeScanned = useCallback(
@@ -109,7 +141,6 @@ export default function ScanScreen() {
       if (scanned) return;
       setScanned(true);
       handleParsed(data);
-      setTimeout(() => setScanned(false), 3000);
     },
     [scanned, handleParsed],
   );
@@ -178,6 +209,95 @@ export default function ScanScreen() {
     }
   }, [handleParsed]);
 
+  const MerchantSheet = () => {
+    if (!merchantPreview) return null;
+    const initials = merchantPreview.payeeName
+      .split(' ')
+      .slice(0, 2)
+      .map((w) => w.charAt(0).toUpperCase())
+      .join('');
+
+    return (
+      <Modal
+        transparent
+        animationType="none"
+        visible={!!merchantPreview}
+        onRequestClose={dismissMerchantSheet}
+      >
+        <TouchableOpacity
+          className="flex-1 bg-black/50"
+          activeOpacity={1}
+          onPress={dismissMerchantSheet}
+        />
+        <Animated.View
+          style={{
+            transform: [{ translateY: sheetAnim }],
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: isDark ? '#1e293b' : '#ffffff',
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            paddingBottom: insets.bottom + 20,
+            paddingHorizontal: 20,
+            paddingTop: 12,
+          }}
+        >
+          <View className="mb-4 items-center">
+            <View className="h-1 w-10 rounded-full bg-border" />
+          </View>
+
+          <View className="items-center mb-6">
+            <View className="h-16 w-16 rounded-2xl bg-primary items-center justify-center mb-3">
+              <Text className="text-2xl font-bold text-primary-foreground">{initials}</Text>
+            </View>
+            <Text className="text-xl font-bold text-foreground">{merchantPreview.payeeName}</Text>
+            <Text className="mt-1 text-sm text-muted-foreground">{merchantPreview.payeeVpa}</Text>
+            <View className="mt-2 flex-row items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1">
+              <CheckCircleIcon size={13} color="#22c55e" />
+              <Text className="text-xs font-medium text-emerald-600">Verified UPI QR</Text>
+            </View>
+          </View>
+
+          {merchantPreview.amount && (
+            <View className="mb-5 items-center rounded-2xl bg-primary/5 border border-primary/20 py-4">
+              <Text className="text-xs text-muted-foreground mb-1">Amount to pay</Text>
+              <Text className="text-3xl font-bold text-primary">
+                {formatCurrency(merchantPreview.amount)}
+              </Text>
+            </View>
+          )}
+
+          {merchantPreview.transactionNote && (
+            <View className="mb-4 rounded-xl bg-secondary px-4 py-3">
+              <Text className="text-xs text-muted-foreground">Note</Text>
+              <Text className="mt-0.5 text-sm text-foreground">{merchantPreview.transactionNote}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={proceedWithMerchant}
+            className="flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-4"
+            activeOpacity={0.85}
+          >
+            <Text className="text-base font-bold text-primary-foreground">
+              {merchantPreview.amount ? 'Proceed to Pay' : 'Enter Amount'}
+            </Text>
+            <ArrowRightIcon size={18} color="#fff" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={dismissMerchantSheet}
+            className="mt-3 items-center py-2"
+          >
+            <Text className="text-sm text-muted-foreground">Cancel</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Modal>
+    );
+  };
+
   if (Platform.OS === 'web') {
     return (
       <ScrollView
@@ -185,6 +305,7 @@ export default function ScanScreen() {
         contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 40 }}
         keyboardShouldPersistTaps="handled"
       >
+        <MerchantSheet />
         <View className="px-5">
           <View className="flex-row items-center">
             <TouchableOpacity
@@ -329,6 +450,7 @@ export default function ScanScreen() {
         contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 40 }}
         keyboardShouldPersistTaps="handled"
       >
+        <MerchantSheet />
         <View className="px-5">
           <View className="flex-row items-center">
             <TouchableOpacity
@@ -385,6 +507,7 @@ export default function ScanScreen() {
 
   return (
     <View className="flex-1 bg-black">
+      <MerchantSheet />
       <CameraView
         style={{ flex: 1 }}
         facing="back"

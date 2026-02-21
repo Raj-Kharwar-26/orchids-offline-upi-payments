@@ -6,17 +6,20 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "credentialsSource": "local",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
-      "credentialsSource": "local",
+      "channel": "production",
       "android": {
         "buildType": "app-bundle"
       }
     }
+  },
+  "update": {
+    "channel": "preview"
   },
   "submit": {
     "production": {}

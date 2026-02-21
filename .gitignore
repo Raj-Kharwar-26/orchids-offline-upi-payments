@@ -25,3 +25,5 @@ Thumbs.db
 
 # Orchids
 .orchids/
+node_modules
+.venv
